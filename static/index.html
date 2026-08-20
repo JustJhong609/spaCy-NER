@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>spaCy NER Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-800 font-sans flex flex-col">
+    <!-- Main container: fits layout to viewport height on large screens -->
+    <div class="max-w-7xl w-full mx-auto px-4 py-6 flex flex-col flex-grow">
+        
+        <!-- Header -->
+        <header class="mb-4">
+            <h1 class="text-2xl font-extrabold text-gray-900 tracking-tight">spaCy NER Visualizer</h1>
+            <p class="text-sm text-gray-600">Analyze English text and visualize Named Entities with optimized inline formatting.</p>
+        </header>
+
+        <!-- TOP SECTION: Sticky Input Configuration (Full Width) -->
+        <div class="sticky top-0 z-20 bg-gray-50 pb-4 pt-2 border-b border-gray-200 mb-6">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+                <form id="ner-form" class="space-y-3">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                        <div class="md:col-span-1">
+                            <div class="flex items-center justify-between mb-1">
+                                <label for="model" class="block text-xs font-semibold text-gray-700 uppercase tracking-wider">Model</label>
+                                <button id="models-info-btn" type="button" class="text-[10px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded border border-indigo-200 transition focus:outline-none uppercase tracking-wider">
+                                    ? Info
+                                </button>
+                            </div>
+                            <select id="model" name="model" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                                <option value="en_core_web_sm">en_core_web_sm (Small)</option>
+                                <option value="en_core_web_md">en_core_web_md (Medium)</option>
+                                <option value="en_core_web_lg">en_core_web_lg (Large)</option>
+                            </select>
+                        </div>
+
+                        <div class="md:col-span-2">
+                            <label for="text" class="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">Text to Analyze</label>
+                            <input type="text" id="text" name="text" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" placeholder="Type or paste text here (e.g. Apple was founded by Steve Jobs)...">
+                        </div>
+
+                        <div class="md:col-span-1 flex gap-2">
+                            <button type="submit" id="submit-btn" class="flex-grow flex justify-center items-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out">
+                                <span id="btn-text">Extract</span>
+                                <svg id="loading-spinner" class="hidden animate-spin ml-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                            </button>
+                            <button id="sample-btn" type="button" class="px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none transition">
+                                Sample
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex items-center">
+                        <label class="inline-flex items-center text-xs font-semibold text-gray-600 cursor-pointer">
+                            <input type="checkbox" id="show-confidence" checked class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4 mr-2">
+                            Include Entity Confidence Levels (Estimates via Beam Search)
+                        </label>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Error Message -->
+        <div id="error-container" class="hidden mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-md">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-semibold text-red-800">Error processing request</h3>
+                    <div id="error-text" class="mt-1 text-sm text-red-700"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- BELOW THAT: Two-Column Layout -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-grow items-stretch mb-8">
+            
+            <!-- LEFT PANE: Analysis Results (58% Width on Large Screens) -->
+            <div class="lg:col-span-7 flex flex-col bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden lg:h-[calc(100vh-220px)] min-h-[350px]">
+                <div class="border-b border-gray-200 px-6 py-4 bg-gray-50 flex items-center justify-between flex-wrap gap-2">
+                    <h2 class="text-md font-bold text-gray-900">Analysis Results</h2>
+                    <span id="result-badge" class="hidden bg-indigo-100 text-indigo-800 text-xs font-semibold px-2.5 py-1 rounded-full"></span>
+                </div>
+
+                <div class="p-6 flex-grow overflow-y-auto flex flex-col space-y-4">
+                    <!-- Color Legend -->
+                    <div id="legend-container" class="hidden flex flex-wrap gap-2 p-2 bg-gray-50 border border-gray-200 rounded-md text-xs">
+                        <!-- Dynamic legend items added here -->
+                    </div>
+
+                    <div id="highlighted-output" class="flex-grow p-5 bg-white border border-gray-200 rounded-lg text-gray-900 leading-loose whitespace-pre-wrap text-[15px]">
+                        <span class="text-gray-400 italic">Submit text in the top panel to visualize entities.</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT PANE: Entity Details Table (42% Width on Large Screens) -->
+            <div class="lg:col-span-5 flex flex-col bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden lg:h-[calc(100vh-220px)] min-h-[350px]">
+                <div class="border-b border-gray-200 px-6 py-4 bg-gray-50 flex items-center justify-between flex-wrap gap-2">
+                    <h2 class="text-md font-bold text-gray-900">Entity Details</h2>
+                    <div class="flex items-center gap-2">
+                        <button id="info-btn" class="bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold px-3 py-1.5 border border-gray-300 rounded shadow-sm transition duration-150">
+                            How it works
+                        </button>
+                        <button id="copy-json-btn" class="hidden bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold px-3 py-1.5 border border-gray-300 rounded shadow-sm transition duration-150">
+                            Copy JSON
+                        </button>
+                    </div>
+                </div>
+
+                <div class="p-6 flex-grow overflow-y-auto flex flex-col space-y-4">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div>
+                            <div id="table-summary" class="text-xs text-gray-500 font-medium"></div>
+                        </div>
+                        <div class="w-full sm:w-48">
+                            <input type="text" id="table-filter" placeholder="Search..." class="w-full rounded-md border border-gray-300 px-2 py-1 text-xs shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto border border-gray-200 rounded-lg flex-grow">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead>
+                                <tr class="bg-gray-50">
+                                    <th id="th-text" class="cursor-pointer select-none px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider hover:bg-gray-100 transition">
+                                        Text <span class="sort-icon"></span>
+                                    </th>
+                                    <th id="th-label" class="cursor-pointer select-none px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider hover:bg-gray-100 transition">
+                                        Label <span class="sort-icon"></span>
+                                    </th>
+                                    <th id="th-confidence" class="cursor-pointer select-none px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider hover:bg-gray-100 transition">
+                                        Confidence <span class="sort-icon"></span>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-output" class="bg-white divide-y divide-gray-200">
+                                <tr>
+                                    <td colspan="5" class="px-4 py-6 text-center text-sm text-gray-400 italic">No entities extracted yet.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('ner-form');
+        const submitBtn = document.getElementById('submit-btn');
+        const btnText = document.getElementById('btn-text');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const errorContainer = document.getElementById('error-container');
+        const errorText = document.getElementById('error-text');
+        const highlightedOutput = document.getElementById('highlighted-output');
+        const tableOutput = document.getElementById('table-output');
+        const resultBadge = document.getElementById('result-badge');
+        const legendContainer = document.getElementById('legend-container');
+        const copyJsonBtn = document.getElementById('copy-json-btn');
+        const tableFilter = document.getElementById('table-filter');
+        const tableSummary = document.getElementById('table-summary');
+        const sampleBtn = document.getElementById('sample-btn');
+        const showConfidenceCheckbox = document.getElementById('show-confidence');
+
+        // Table headers for sorting
+        const headers = {
+            text: document.getElementById('th-text'),
+            label: document.getElementById('th-label'),
+            confidence: document.getElementById('th-confidence')
+        };
+
+        const COLOR_MAP = {
+            'PERSON': 'bg-blue-100 text-blue-900 border-blue-200',
+            'ORG': 'bg-green-100 text-green-900 border-green-200',
+            'GPE': 'bg-amber-100 text-amber-900 border-amber-200',
+            'LOC': 'bg-teal-100 text-teal-900 border-teal-200',
+            'DATE': 'bg-purple-100 text-purple-900 border-purple-200',
+            'TIME': 'bg-pink-100 text-pink-900 border-pink-200',
+            'MONEY': 'bg-emerald-100 text-emerald-900 border-emerald-200',
+            'PERCENT': 'bg-indigo-100 text-indigo-900 border-indigo-200',
+            'CARDINAL': 'bg-cyan-100 text-cyan-900 border-cyan-200',
+            'ORDINAL': 'bg-sky-100 text-sky-900 border-sky-200',
+            'PRODUCT': 'bg-orange-100 text-orange-900 border-orange-200',
+            'EVENT': 'bg-violet-100 text-violet-900 border-violet-200',
+            'WORK_OF_ART': 'bg-fuchsia-100 text-fuchsia-900 border-fuchsia-200',
+            'LAW': 'bg-lime-100 text-lime-900 border-lime-200',
+            'LANGUAGE': 'bg-rose-100 text-rose-900 border-rose-200',
+            'FAC': 'bg-stone-100 text-stone-900 border-stone-200',
+            'NORP': 'bg-yellow-100 text-yellow-900 border-yellow-200',
+            'QUANTITY': 'bg-emerald-100 text-emerald-900 border-emerald-200'
+        };
+
+        const SAMPLE_TEXT = `Google was founded in September 1998 by Larry Page and Sergey Brin while they were Ph.D. students at Stanford University in California. Today, the company is headquartered in Mountain View, California and employs over 150,000 people globally. On October 24, 2015, Sundar Pichai became the CEO of Google, replacing Larry Page. In 2023, Google's parent company Alphabet Inc. reported revenues of $307.39 billion, which represented an increase of 8% compared to the previous year.`;
+
+        let currentEntities = [];
+        let currentText = '';
+        let lastResponseData = null;
+        let sortConfig = { key: null, direction: 'asc' };
+
+        function getColorClass(label) {
+            return COLOR_MAP[label] || 'bg-gray-100 text-gray-900 border-gray-200';
+        }
+
+        function escapeHTML(str) {
+            return str.replace(/[&<>'"]/g, 
+                tag => ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    "'": '&#39;',
+                    '"': '&quot;'
+                }[tag] || tag)
+            );
+        }
+
+        // Fill sample text
+        sampleBtn.addEventListener('click', () => {
+            document.getElementById('text').value = SAMPLE_TEXT;
+        });
+
+        // Copy as JSON functionality
+        copyJsonBtn.addEventListener('click', () => {
+            if (!lastResponseData) return;
+            navigator.clipboard.writeText(JSON.stringify(lastResponseData, null, 2))
+                .then(() => {
+                    const originalText = copyJsonBtn.textContent;
+                    copyJsonBtn.textContent = 'Copied!';
+                    copyJsonBtn.classList.add('bg-green-50', 'text-green-700', 'border-green-300');
+                    setTimeout(() => {
+                        copyJsonBtn.textContent = originalText;
+                        copyJsonBtn.classList.remove('bg-green-50', 'text-green-700', 'border-green-300');
+                    }, 2000);
+                });
+        });
+
+        // Filter event
+        tableFilter.addEventListener('input', () => {
+            renderTable();
+        });
+
+        // Sort events
+        headers.text.addEventListener('click', () => handleSort('text'));
+        headers.label.addEventListener('click', () => handleSort('label'));
+        headers.confidence.addEventListener('click', () => handleSort('confidence'));
+
+        function handleSort(key) {
+            if (sortConfig.key === key) {
+                sortConfig.direction = sortConfig.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortConfig.key = key;
+                sortConfig.direction = 'asc';
+            }
+            updateSortIcons();
+            renderTable();
+        }
+
+        function updateSortIcons() {
+            Object.keys(headers).forEach(k => {
+                const iconSpan = headers[k].querySelector('.sort-icon');
+                if (sortConfig.key === k) {
+                    iconSpan.innerHTML = sortConfig.direction === 'asc' ? ' &#9650;' : ' &#9660;';
+                } else {
+                    iconSpan.innerHTML = '';
+                }
+            });
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const text = document.getElementById('text').value.trim();
+            const model = document.getElementById('model').value;
+
+            // Reset UI
+            errorContainer.classList.add('hidden');
+            resultBadge.classList.add('hidden');
+            copyJsonBtn.classList.add('hidden');
+            legendContainer.classList.add('hidden');
+            submitBtn.disabled = true;
+            btnText.textContent = "Extracting...";
+            loadingSpinner.classList.remove('hidden');
+
+            if (!text) {
+                highlightedOutput.innerHTML = `<span class="text-gray-400 italic">Please enter text to analyze.</span>`;
+                const initColspan = showConfidenceCheckbox.checked ? 3 : 2;
+                tableOutput.innerHTML = `<tr><td colspan="${initColspan}" class="px-4 py-6 text-center text-sm text-gray-400 italic">No text provided.</td></tr>`;
+                submitBtn.disabled = false;
+                btnText.textContent = "Extract";
+                loadingSpinner.classList.add('hidden');
+                return;
+            }
+
+            try {
+                const response = await fetch('/extract-entities', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ text, model, show_confidence: showConfidenceCheckbox.checked })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Failed to extract entities.');
+                }
+
+                lastResponseData = data;
+                currentEntities = data.entities;
+                currentText = data.text;
+                sortConfig = { key: null, direction: 'asc' };
+                updateSortIcons();
+                tableFilter.value = '';
+
+                renderVisualizer(data);
+                renderTable();
+                copyJsonBtn.classList.remove('hidden');
+            } catch (err) {
+                errorText.textContent = err.message;
+                errorContainer.classList.remove('hidden');
+            } finally {
+                submitBtn.disabled = false;
+                btnText.textContent = "Extract";
+                loadingSpinner.classList.add('hidden');
+            }
+        });
+
+        function renderVisualizer(data) {
+            const { text, entities } = data;
+            
+            // Render Badge count
+            resultBadge.textContent = `${entities.length} Entit${entities.length === 1 ? 'y' : 'ies'} Found`;
+            resultBadge.classList.remove('hidden');
+
+            // Render Legend & Highlighted Output
+            if (entities.length === 0) {
+                highlightedOutput.textContent = text;
+                legendContainer.classList.add('hidden');
+            } else {
+                // Get unique labels from response to build dynamic legend
+                const activeLabels = [...new Set(entities.map(e => e.label))].sort();
+                legendContainer.innerHTML = activeLabels.map(label => `
+                    <span class="inline-flex items-center px-2 py-0.5 rounded border ${getColorClass(label)} font-semibold">
+                        ${label}
+                    </span>
+                `).join('');
+                legendContainer.classList.remove('hidden');
+
+                let html = '';
+                let lastIdx = 0;
+                
+                // Sort by starting character
+                const sortedEntities = [...entities].sort((a, b) => a.start_char - b.start_char);
+
+                sortedEntities.forEach(ent => {
+                    // Append text preceding the entity
+                    html += escapeHTML(text.slice(lastIdx, ent.start_char));
+                    
+                    const colorClass = getColorClass(ent.label);
+                    
+                    // Conditionally include confidence details in inline badge
+                    const isConfAvailable = ent.confidence !== null && ent.confidence !== undefined;
+                    const confidenceText = isConfAvailable ? ` (${(ent.confidence * 100).toFixed(0)}%)` : '';
+                    const titleText = isConfAvailable ? ` title="Confidence: ${(ent.confidence * 100).toFixed(1)}%"` : '';
+                    
+                    html += `<span class="${colorClass} px-1 rounded border border-current font-medium inline mx-0.5 leading-normal"${titleText}>` +
+                            `${escapeHTML(ent.text)}` +
+                            `<span class="ml-0.5 text-[9px] uppercase font-bold tracking-wider opacity-60 align-super select-none">${ent.label}${confidenceText}</span>` +
+                            `</span>`;
+                    lastIdx = ent.end_char;
+                });
+                
+                // Append remaining text
+                html += escapeHTML(text.slice(lastIdx));
+                highlightedOutput.innerHTML = html;
+            }
+        }
+
+        function renderTable() {
+            const query = tableFilter.value.toLowerCase().trim();
+            
+            // 1. Filter
+            let filtered = currentEntities.filter(ent => {
+                return ent.text.toLowerCase().includes(query) || ent.label.toLowerCase().includes(query);
+            });
+
+            // 2. Sort
+            if (sortConfig.key) {
+                filtered.sort((a, b) => {
+                    let valA = a[sortConfig.key];
+                    let valB = b[sortConfig.key];
+
+                    if (typeof valA === 'string') {
+                        return sortConfig.direction === 'asc' 
+                            ? valA.localeCompare(valB) 
+                            : valB.localeCompare(valA);
+                    } else {
+                        return sortConfig.direction === 'asc' 
+                            ? valA - valB 
+                            : valB - valA;
+                    }
+                });
+            }
+
+            // 3. Render Summary Count
+            const categoriesCount = new Set(filtered.map(e => e.label)).size;
+            tableSummary.textContent = `${filtered.length} entities found across ${categoriesCount} categories.`;
+
+            // Check if confidence data is present in returned entities
+            const hasConfidence = filtered.length > 0 && filtered[0].confidence !== null && filtered[0].confidence !== undefined;
+            const confidenceHeader = document.getElementById('th-confidence');
+            const colSpan = hasConfidence ? 3 : 2;
+            
+            if (hasConfidence) {
+                confidenceHeader.classList.remove('hidden');
+            } else {
+                confidenceHeader.classList.add('hidden');
+            }
+
+            // 4. Render Rows
+            if (filtered.length === 0) {
+                tableOutput.innerHTML = `<tr><td colspan="${colSpan}" class="px-4 py-6 text-center text-sm text-gray-400 italic">No matching entities found.</td></tr>`;
+            } else {
+                tableOutput.innerHTML = filtered.map((ent, idx) => `
+                    <tr class="even:bg-gray-50/50 hover:bg-gray-100 transition duration-75">
+                        <td class="px-4 py-3 text-sm font-semibold text-gray-900 whitespace-normal">${escapeHTML(ent.text)}</td>
+                        <td class="px-4 py-3 text-sm whitespace-nowrap">
+                            <span class="${getColorClass(ent.label)} px-2 py-0.5 rounded-full text-[11px] font-bold border border-current">
+                                ${ent.label}
+                            </span>
+                        </td>
+                        ${hasConfidence ? `<td class="px-4 py-3 text-sm text-gray-500 whitespace-nowrap font-medium">${(ent.confidence * 100).toFixed(1)}%</td>` : ''}
+                    </tr>
+                `).join('');
+            }
+        }
+    </script>
+
+    <!-- Info Modal -->
+    <div id="info-modal" class="hidden fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <!-- Backdrop -->
+            <div id="modal-backdrop" class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
+
+            <!-- Align helper -->
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <!-- Modal Content Card -->
+            <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6 border border-gray-200">
+                <div>
+                    <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-indigo-100">
+                        <svg class="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    <div class="mt-3 text-center sm:mt-5">
+                        <h3 class="text-lg leading-6 font-bold text-gray-900" id="modal-title">
+                            How Entity Confidence is Estimated
+                        </h3>
+                        <div class="mt-2 text-sm text-gray-600 text-left space-y-3 leading-relaxed">
+                            <p>
+                                By default, spaCy's Named Entity Recognition (NER) does not output probability scores. To estimate a confidence level, we perform a <strong>Beam Search</strong> (width = 16) over the document.
+                            </p>
+                            <p>
+                                Rather than evaluating only the single best path, the algorithm keeps track of the top 16 alternative parsing paths.
+                            </p>
+                            <ul class="list-disc list-inside space-y-1.5 bg-gray-50 p-3 rounded border border-gray-200 text-xs">
+                                <li><strong>Score Aggregation:</strong> We collect all alternative parses containing the specific entity span and label.</li>
+                                <li><strong>Normalization:</strong> The confidence score represents the sum of the scores of all parses containing that entity, normalized against the total beam score.</li>
+                                <li><strong>Speed note:</strong> Enabling this causes the model to explore multiple search paths, which increases latency slightly.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-5 sm:mt-6">
+                    <button type="button" id="close-modal-btn" class="inline-flex justify-center w-full rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:text-sm">
+                        Got it!
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Models Info Modal -->
+    <div id="models-info-modal" class="hidden fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title-models" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <!-- Backdrop -->
+            <div id="models-backdrop" class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
+
+            <!-- Align helper -->
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <!-- Modal Content Card -->
+            <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-xl sm:w-full sm:p-6 border border-gray-200">
+                <div>
+                    <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-indigo-100">
+                        <svg class="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                        </svg>
+                    </div>
+                    <div class="mt-3 text-center sm:mt-5">
+                        <h3 class="text-lg leading-6 font-bold text-gray-900" id="modal-title-models">
+                            spaCy English Models Comparison
+                        </h3>
+                        <div class="mt-4 text-sm text-gray-600 text-left space-y-4 leading-relaxed">
+                            <div class="border-b border-gray-200 pb-3">
+                                <h4 class="font-bold text-gray-800 flex items-center gap-1.5">
+                                    <span class="px-1.5 py-0.5 rounded bg-blue-100 text-blue-900 text-xs font-bold border border-blue-200">en_core_web_sm</span> (Small)
+                                </h4>
+                                <p class="text-xs text-gray-500 mt-1">
+                                    Size: ~12 MB. Optimized for speed and small memory environments. Contains no static word vectors (contextual tensors only). Ideal for basic NER or resource-constrained environments.
+                                </p>
+                            </div>
+                            <div class="border-b border-gray-200 pb-3">
+                                <h4 class="font-bold text-gray-800 flex items-center gap-1.5">
+                                    <span class="px-1.5 py-0.5 rounded bg-green-100 text-green-900 text-xs font-bold border border-green-200">en_core_web_md</span> (Medium)
+                                </h4>
+                                <p class="text-xs text-gray-500 mt-1">
+                                    Size: ~40 MB. Balances execution speed and precision. Includes 20k unique static word vectors (300 dimensions). Enables semantic similarity testing (`.similarity()`).
+                                </p>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-gray-800 flex items-center gap-1.5">
+                                    <span class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-900 text-xs font-bold border border-purple-200">en_core_web_lg</span> (Large)
+                                </h4>
+                                <p class="text-xs text-gray-500 mt-1">
+                                    Size: ~560 MB. Features 685k unique static word vectors (300 dimensions). Delivers the highest precision for NER extraction tasks, but has a larger memory footprint.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-6">
+                    <button type="button" id="close-models-modal-btn" class="inline-flex justify-center w-full rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:text-sm">
+                        Got it!
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Modal triggers
+        const infoBtn = document.getElementById('info-btn');
+        const infoModal = document.getElementById('info-modal');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const modalBackdrop = document.getElementById('modal-backdrop');
+
+        infoBtn.addEventListener('click', () => {
+            infoModal.classList.remove('hidden');
+        });
+
+        const hideModal = () => {
+            infoModal.classList.add('hidden');
+        };
+
+        closeModalBtn.addEventListener('click', hideModal);
+        modalBackdrop.addEventListener('click', hideModal);
+
+        // Models Info Modal triggers
+        const modelsInfoBtn = document.getElementById('models-info-btn');
+        const modelsInfoModal = document.getElementById('models-info-modal');
+        const closeModelsModalBtn = document.getElementById('close-models-modal-btn');
+        const modelsBackdrop = document.getElementById('models-backdrop');
+
+        modelsInfoBtn.addEventListener('click', () => {
+            modelsInfoModal.classList.remove('hidden');
+        });
+
+        const hideModelsModal = () => {
+            modelsInfoModal.classList.add('hidden');
+        };
+
+        closeModelsModalBtn.addEventListener('click', hideModelsModal);
+        modelsBackdrop.addEventListener('click', hideModelsModal);
+    </script>
+</body>
+</html>
