@@ -12,13 +12,13 @@ pip install -r requirements.txt
 
 ### 2. Download a spaCy Model
 Download the default model before running the server:
-```bash
+```bash  
 python -m spacy download en_core_web_sm
 ```
 *(Optional: You can also download `en_core_web_md` or `en_core_web_lg` if you wish to compare different model sizes.)*
 
 ### 3. Run the Server
-Launch the server via uvicorn:
+Launch the server via uvicorn: 
 ```bash
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
