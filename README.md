@@ -7,7 +7,7 @@ A simple web-based testing interface for spaCy Named Entity Recognition (NER), d
 ### 1. Install Dependencies
 Install the required packages using pip:
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt 
 ```
 
 ### 2. Download a spaCy Model
